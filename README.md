@@ -1,7 +1,7 @@
-# Kendo Tournament Management System — v0.2
+# Kendo Tournament Management System — v0.3
 
 GitHub Pages (frontend) + GAS Web App (API) + Google Sheets (DB).
-English UI. Three access tiers.
+English UI. Three access tiers. Standard-seed elimination with court split.
 
 ---
 
@@ -13,71 +13,82 @@ English UI. Three access tiers.
 | EDIT_KEY | `edit2026` | View + result entry |
 | ADMIN_KEY | `admin2026` | Everything (all pre-match setup) |
 
-Change: GAS editor → Project Settings → Script Properties → edit values (no redeploy needed).
-
-The login screen detects the role automatically from whichever single key is entered.
-Distribute the **View key** to most members; give Edit/Admin keys only to the few who need them.
+Change in GAS → Project Settings → Script Properties (no redeploy needed).
+Login auto-detects role from the single key. Give View to most members.
 
 ---
-
-## Files
-
-```
-gas/Code.gs        API (init, bracket gen, results, progression, 3-tier auth)
-frontend/index.html  Login gate + View / Entry / Admin
-frontend/app.js      API client, SVG bracket, placement routing, courts
-frontend/style.css   Scoresheet theme, mobile-first
-```
 
 ## Deploy (~10 min)
 
 ### A. Sheets + GAS
-1. https://sheets.new → create spreadsheet
-2. Extensions → Apps Script
-3. Paste `gas/Code.gs`, save
-4. Run `initSetup` once (creates 5 sheets + keys; check log)
-5. Deploy → New deployment → Web app → Execute as **Me**, Access **Anyone**
-6. Copy the `/exec` URL
-   - On later edits: Manage deployments → edit existing → new version (keeps URL)
+1. https://sheets.new → create spreadsheet → Extensions → Apps Script
+2. Paste `gas/Code.gs`, save
+3. Run `initSetup` once (creates 5 sheets + 3 keys; see log)
+4. Deploy → New deployment → Web app → Execute as **Me**, Access **Anyone** → copy `/exec` URL
+   - Later edits: Manage deployments → edit existing → **New version** (keeps URL)
 
 ### B. GitHub Pages
-1. New public repo (e.g. `kendo-taikai`)
-2. Put the 3 `frontend/` files at repo root, push
-3. Settings → Pages → main / root
-4. Open `https://superduperohiolife-lgtm.github.io/kendo-taikai/`
+1. New public repo → put the 3 `frontend/` files at root → push
+2. Settings → Pages → main / root → open the URL
 
 ### C. First use
-1. On the login screen: paste the `/exec` URL + your key → Enter
-2. Admin: create tournament → division → register players (or bulk-edit the sheet) →
-   assign slots → (optional) set Placement→Elim routing → set courts
-3. Edit: enter results during the event
-4. View: watch the bracket update live
+Login with URL + key. As Admin: create tournament → division (set **Courts** + groups) →
+register players (or bulk-edit sheet) → assign Placement slots → (optional) adjust
+elimination seeding → set courts. Edit role enters results; View watches live.
 
-## What's new in v0.2
+---
 
-| # | Change |
+## v0.3 — elimination structure (this release)
+
+The big change. Analysis of the 9-division real workbook (`indivisual_test.xlsx`) showed the
+elimination bracket is **standard tournament seeding**, not a fixed formula:
+
+- **Placement winners (A₁..A_G) = top seeds 1..G**; **losers (B₁..B_G) = lower seeds G+1..2G**.
+- Bracket size S = next power of 2 ≥ 2G; extra seeds are **BYEs that land on the top A seeds**,
+  so some winners get a round-2 bye and all losers play round 1 (matches the real sheets:
+  "the B slots are filled without exception, some A slots join them").
+- Strong seeds never meet in round 1 (spreads favorites automatically).
+- For G=14 (28 slots) this reproduces the reversed pairing A_i vs B_(G+1−i).
+
+**Courts are a separate layer.** At division creation you set the number of courts.
+Round-1 blocks are split contiguously across courts; a match keeps its court until blocks
+merge (the final is central). The Elimination view has **court filter chips** so spectators
+can see just their court.
+
+**Seeding is editable (case Y).** Every round-1 slot links to `Group n Winner/Loser` (or BYE).
+Default = standard seed; Admin can rewrite any slot in **Elimination seeding (round-1 links)**.
+Editing is **locked once elimination results exist** (undo them to edit again).
+
+## Full feature list
+
+| Area | Behavior |
 |---|---|
-| 1 | Duplicate tournament / division / player now rejected with an error |
-| 2 | Bottom tab shows selected state by inversion (indigo fill) |
-| 3 | 3-tier login gate; role auto-detected from key; tabs shown by permission; View is default & most common |
-| 4 | Admin can set Placement→Elimination routing in advance ("Group 1 Winner → Elim E3 Red") |
-| 5 | View split into Placement / Elimination / Match List; Elimination is an SVG bracket with connector lines (winner path in red), top=Red / bottom=White fixed |
-| 6 | Courts editable per match (Placement & Elimination) |
-| 7 | Entire UI in English |
-| 8 | Player registration and all pre-match setup are Admin-only |
-| 9 | Admin has a link to open the spreadsheet for bulk editing |
-| 10 | Division pulldown shown only for View/Edit (hidden in Admin) |
-| 11 | Mobile: player names wrap instead of truncating; team shown on a second line |
+| Roles | View / Edit / Admin, auto-detected from key; tabs by permission; double-tap role badge to log out |
+| View | Placement / Elimination / Match List tabs. Elimination = SVG bracket with connector lines (winner path in red), top=Red / bottom=White, zoom ±/Fit, court filter |
+| Entry | Tap winner + M/K/D/T/H (max 2, same symbol ×2 allowed); Encho / Fusen (walkover → winner ○○); undo cascades downstream |
+| Admin | Bulk-edit link to the spreadsheet; create tournament/division (courts + placement groups or bracket size); register players; slot assignment (players/BYE); elimination seeding editor; per-match court editor |
+| Concurrency | LockService serializes writes; same-match re-entry is last-write-wins with downstream clear |
+| Duplicates | Duplicate tournament / division / player rejected with an error |
+| Mobile | Player names wrap (never truncated); team on a second line |
 
-## Notes / limits
+## Schema note (upgrading from v0.2)
 
-- Zoom / scroll controls on the Elimination view (±, Fit); large brackets scroll horizontally.
-- Placement routing default = rotation offset (auto). Override any time before results.
-- Slot assignment should be finalized before matches start; changing it after results exist requires undo.
-- 3rd-place match: non-placement brackets only (unchanged).
-- Double-tap the role badge (top-right) to log out / switch key.
+`Matches` gained a `phase` column and round-1 now uses phase `elim1` for both placement and
+non-placement brackets. If you have old data, clear `Matches` / `Entries` / `Divisions`
+(keep headers, keep `PlayerMaster` / `Tournaments`) and recreate the division. A helper:
 
-## Next
+```javascript
+function resetBrackets() {
+  ['Matches','Entries','Divisions'].forEach(function(n){
+    var sh=SpreadsheetApp.getActiveSpreadsheet().getSheetByName(n);
+    if(sh&&sh.getLastRow()>1) sh.getRange(2,1,sh.getLastRow()-1,sh.getLastColumn()).clearContent();
+  });
+}
+```
 
-- Phase 5: load the real Jr Youth Girls data and reconcile against the Excel result
-- Phase 6: multiple divisions in parallel → team matches
+## Limits / next
+
+- Placement must finish before its winners/losers appear in elimination (by design).
+- Court split assumes contiguous blocks; uneven court counts put the remainder on leading courts.
+- Phase 5: load the real division data and reconcile placements vs. the workbook.
+- Phase 6: multiple divisions in parallel → team matches.

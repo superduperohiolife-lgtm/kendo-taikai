@@ -142,7 +142,7 @@ function doPost(e) {
       case 'create_division':   return ok_(actCreateDivision_(p));
       case 'assign_entries':    return ok_(actAssignEntries_(p));
       case 'set_court':         return ok_(actSetCourt_(p));
-      case 'set_placement_map': return ok_(actSetPlacementMap_(p));
+      case 'set_links':         return ok_(actSetLinks_(p));
       case 'save_result':       return ok_(actSaveResult_(p));
       case 'undo_result':       return ok_(actUndoResult_(p));
       default:                  return err_('Unknown action: ' + p.action);
@@ -224,15 +224,16 @@ function actCreateDivision_(p) {
     type: 'individual', placement: placement,
     third_place: placement ? false : !!p.third_place, status: 'setup'
   });
+  const courts = Math.max(1, parseInt(p.courts, 10) || 1);
   if (placement) {
     const G = parseInt(p.group_count, 10);
     if (!(G >= 2 && G <= 60)) throw new Error('group_count must be 2..60 (max 120 players)');
-    genPlacementBracket_(divId, G);
+    genPlacementBracket_(divId, G, courts);
     return { division_id: divId, slots: G * 2 };
   } else {
     const S = parseInt(p.bracket_size, 10);
     if ([4, 8, 16, 32, 64, 128].indexOf(S) < 0) throw new Error('bracket_size must be 4/8/16/32/64/128');
-    genSingleElim_(divId, S, !!p.third_place);
+    genSingleElim_(divId, S, !!p.third_place, courts);
     return { division_id: divId, slots: S };
   }
 }
@@ -261,23 +262,31 @@ function actSetCourt_(p) {
   patchRow_('Matches', m._row, { court: p.court || '' });
   return { match_id: p.match_id, court: p.court || '' };
 }
-function actSetPlacementMap_(p) {
-  if (!p.division_id || !Array.isArray(p.map)) throw new Error('Invalid arguments');
+/**
+ * Edit elim round-1 links (v0.3, case Y). Editable only before any elim result exists.
+ * p:{ division_id, links: [ {elim_code, side('R'|'W'), src} ] }
+ *   src = 'P{g}:W' | 'P{g}:L' | 'BYE' | 'slot:{n}'
+ */
+function actSetLinks_(p) {
+  if (!p.division_id || !Array.isArray(p.links)) throw new Error('Invalid arguments');
   const matches = readAll_('Matches').filter(function (m) { return m.division_id === p.division_id; });
+  // guard: no elim result yet
+  const hasElimResult = matches.some(function (m) { return (m.phase === 'elim1' || m.phase === 'elim') && m.winner && m.outcome !== 'bye'; });
+  if (hasElimResult) throw new Error('Links are locked: elimination results already exist. Undo them first.');
   const byCode = {}; matches.forEach(function (m) { byCode[m.code] = m; });
-  matches.filter(function (m) { return m.phase === 'elim1'; }).forEach(function (m) {
-    patchRow_('Matches', m._row, { red_source: 'BYE', white_source: 'BYE' });
-  });
-  p.map.forEach(function (r) {
+  p.links.forEach(function (r) {
     const tgt = byCode[r.elim_code];
-    if (!tgt) throw new Error('Unknown elim_code: ' + r.elim_code);
-    const src = 'match:P' + r.p_group + ':' + r.result;
+    if (!tgt || tgt.phase !== 'elim1') throw new Error('Not an editable round-1 match: ' + r.elim_code);
+    let src = r.src || 'BYE';
+    if (/^P\d+:(W|L)$/.test(src)) src = 'match:' + src;
+    else if (/^slot:\d+$/.test(src) || src === 'BYE') { /* ok */ }
+    else throw new Error('Invalid source: ' + src);
     const col = r.side === 'R' ? 'red_source' : 'white_source';
     const o = {}; o[col] = src;
     patchRow_('Matches', tgt._row, o);
   });
   resolveDivision_(p.division_id);
-  return { updated: p.map.length };
+  return { updated: p.links.length };
 }
 function actSaveResult_(p) {
   const m = findMatch_(p.division_id, p.match_id);
@@ -348,12 +357,13 @@ function newMatch_(divId, seq, code, phase, round, red, white) {
     winner: '', red_points: '', white_points: '', outcome: '', updated_at: '', updated_by: ''
   };
 }
-function genSingleElim_(divId, size, thirdPlace) {
+function genSingleElim_(divId, size, thirdPlace, courts) {
   const rows = []; let seq = 1; let round = 1;
   let matches = size / 2; let codes = [];
   for (let i = 1; i <= matches; i++) {
     const code = codeForRound_(size, i);
-    rows.push(newMatch_(divId, seq++, code, 'elim', round, 'slot:' + (2 * i - 1), 'slot:' + (2 * i)));
+    // mark round-1 as 'elim1' so court split + link editor treat it uniformly
+    rows.push(newMatch_(divId, seq++, code, 'elim1', round, 'slot:' + (2 * i - 1), 'slot:' + (2 * i)));
     codes.push(code);
   }
   let prevCodes = [];
@@ -365,25 +375,40 @@ function genSingleElim_(divId, size, thirdPlace) {
       codes.push(code);
     }
   }
+  assignCourts_(rows, size, courts);
   if (thirdPlace && size >= 4) rows.push(newMatch_(divId, seq++, '3RD', 'elim', round, 'match:SF1:L', 'match:SF2:L'));
   rows.forEach(function (r) { appendRow_('Matches', r); });
 }
-function genPlacementBracket_(divId, G) {
+/**
+ * Placement bracket (v0.3, standard-seed method).
+ * Placement winners A_1..A_G = seeds 1..G (strong)
+ * Placement losers  B_1..B_G = seeds G+1..2G (weak)
+ * Extra seeds (2G+1..S) = BYE, land on top A seeds -> some A get a round-2 bye.
+ * Every elim slot links to 'match:P{g}:W' or ':L' (editable via set_links).
+ * @param courts number of courts (>=1); round-1..semi split across courts, final merges.
+ */
+function genPlacementBracket_(divId, G, courts) {
   const rows = []; let seq = 1;
+  // Placement round
   for (let g = 1; g <= G; g++) rows.push(newMatch_(divId, seq++, 'P' + g, 'placement', 1, 'slot:' + (2 * g - 1), 'slot:' + (2 * g)));
-  const off = Math.floor(G / 2);
-  for (let g = 1; g <= G; g++) {
-    const gb = ((g - 1 + off) % G) + 1;
-    rows.push(newMatch_(divId, seq++, 'E' + g, 'elim1', 2, 'match:P' + g + ':W', 'match:P' + gb + ':L'));
+  // Elimination bracket by standard seed table
+  const N = 2 * G;
+  const S = nextPow2_(N);
+  const seeds = seedPositions_(S);          // seeds[pos-1] = seed number at that vertical position
+  function seedLink(seed) {
+    if (seed > N) return 'BYE';
+    if (seed <= G) return 'match:P' + seed + ':W';         // A_seed = winner of P{seed}
+    return 'match:P' + (seed - G) + ':L';                  // B_(seed-G) = loser of P{seed-G}
   }
-  const S2 = nextPow2_(G); const seeds = seedPositions_(S2);
-  let round = 3; let matches = S2 / 2; let prevCodes = []; let codes = [];
+  // Round 1 (elim1) with links
+  let round = 1; let matches = S / 2; let codes = [];
   for (let i = 1; i <= matches; i++) {
-    const sA = seeds[2 * i - 2], sB = seeds[2 * i - 1];
-    const code = codeForRound_(S2, i);
-    rows.push(newMatch_(divId, seq++, code, 'elim', round, sA <= G ? 'match:E' + sA + ':W' : 'BYE', sB <= G ? 'match:E' + sB + ':W' : 'BYE'));
+    const code = codeForRound_(S, i);
+    rows.push(newMatch_(divId, seq++, code, 'elim1', round, seedLink(seeds[2 * i - 2]), seedLink(seeds[2 * i - 1])));
     codes.push(code);
   }
+  // Upper rounds
+  let prevCodes;
   while (matches > 1) {
     round++; prevCodes = codes; codes = []; matches = matches / 2;
     for (let i = 1; i <= matches; i++) {
@@ -392,7 +417,37 @@ function genPlacementBracket_(divId, G) {
       codes.push(code);
     }
   }
+  assignCourts_(rows, S, courts);
   rows.forEach(function (r) { appendRow_('Matches', r); });
+}
+
+/**
+ * Assign courts to elim matches. Round-1 blocks are split into `courts` contiguous
+ * groups; each match keeps the court of its block until the merge round (final).
+ * The final (and any round where blocks converge) is left blank (central).
+ */
+function assignCourts_(rows, S, courts) {
+  courts = Math.max(1, parseInt(courts, 10) || 1);
+  const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+  const r1 = rows.filter(function (m) { return m.phase === 'elim1'; });
+  if (!r1.length || courts < 2) return;
+  const per = Math.ceil(r1.length / courts);   // round up; remainder on leading courts
+  // map round-1 code -> court
+  const courtOf = {};
+  r1.forEach(function (m, idx) {
+    const c = Math.min(courts - 1, Math.floor(idx / per));
+    m.court = letters[c]; courtOf[m.code] = letters[c];
+  });
+  // propagate court up: a match inherits court if all its feeders share one court
+  const byCode = {}; rows.forEach(function (m) { byCode[m.code] = m; });
+  const upper = rows.filter(function (m) { return m.phase === 'elim'; }).sort(function (a, b) { return a.round - b.round; });
+  upper.forEach(function (m) {
+    const fc = [m.red_source, m.white_source].map(function (s) {
+      const mm = String(s).match(/^match:([^:]+):/); return mm ? courtOf[mm[1]] : null;
+    });
+    if (fc[0] && fc[0] === fc[1]) { m.court = fc[0]; courtOf[m.code] = fc[0]; }
+    else { m.court = ''; courtOf[m.code] = ''; }   // merge point -> central
+  });
 }
 
 // ============================================================

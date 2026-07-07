@@ -44,6 +44,7 @@
           <button data-z="out">−</button><span id="zoomLbl">100%</span><button data-z="in">+</button>
           <button data-z="fit">Fit</button>
         </div>
+        <div id="courtFilter" class="court-filter"></div>
         <div id="elimScroll" class="elim-scroll"></div>
       </div>
       <div id="subList" class="subpane hidden"></div>
@@ -77,6 +78,7 @@
         <label>Tournament <select id="tourSelect"></select></label>
         <label>Division name <input id="newDivName" placeholder="e.g. Jr Youth Girls"></label>
         <label class="row"><input id="chkPlacement" type="checkbox" checked> Placement round (AUSKF style)</label>
+        <label>Courts <input id="courtCount" type="number" min="1" max="8" value="2"></label>
         <div id="placementOpts">
           <label>Placement groups (= half of slots) <input id="groupCount" type="number" min="2" max="60" value="14"></label>
         </div>
@@ -110,12 +112,12 @@
         <button id="btnSaveSlots" class="primary hidden">Save assignment</button>
       </details>
 
-      <details class="card"><summary>Placement → Elimination routing</summary>
-        <p class="meta">Decide in advance where each Placement result goes.
-          e.g. "Group 1 Winner → Elim match 3, Red".</p>
-        <button id="btnLoadMap">Load routing</button>
+      <details class="card"><summary>Elimination seeding (round-1 links)</summary>
+        <p class="meta">Default is standard seeding (winners = top seeds, losers = lower seeds).
+          Edit any round-1 slot before matches start. Locked once results exist.</p>
+        <button id="btnLoadMap">Load seeding</button>
         <div id="mapArea"></div>
-        <button id="btnSaveMap" class="primary hidden">Save routing</button>
+        <button id="btnSaveMap" class="primary hidden">Save seeding</button>
       </details>
 
       <details class="card"><summary>Courts</summary>

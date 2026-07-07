@@ -175,13 +175,25 @@ function renderMatchList() {
 
 // ---------------- Elimination SVG bracket with connector lines ----------------
 let zoom = 1;
+let courtSel = '';   // '' = all
+function renderCourtFilter() {
+  const host = $('#courtFilter');
+  if (!state) { host.innerHTML = ''; return; }
+  const courts = [...new Set(state.matches.filter((m) => m.phase === 'elim1' || m.phase === 'elim').map((m) => m.court).filter(Boolean))].sort();
+  if (!courts.length) { host.innerHTML = ''; return; }
+  host.innerHTML = `<button class="cf ${courtSel === '' ? 'on' : ''}" data-c="">All</button>` +
+    courts.map((c) => `<button class="cf ${courtSel === c ? 'on' : ''}" data-c="${esc(c)}">Court ${esc(c)}</button>`).join('');
+  $$('#courtFilter .cf').forEach((b) => b.addEventListener('click', () => { courtSel = b.dataset.c; renderElim(); }));
+}
 function renderElim() {
   const host = $('#elimScroll');
+  renderCourtFilter();
   if (!state) { host.innerHTML = '<p class="meta">Select a division.</p>'; return; }
-  const elimMatches = state.matches.filter((m) => m.phase === 'elim1' || m.phase === 'elim');
+  let elimMatches = state.matches.filter((m) => m.phase === 'elim1' || m.phase === 'elim');
+  if (courtSel) elimMatches = elimMatches.filter((m) => m.court === courtSel);
   const third = elimMatches.filter((m) => m.code === '3RD');
   const main = elimMatches.filter((m) => m.code !== '3RD');
-  if (!main.length) { host.innerHTML = '<p class="meta">No elimination bracket.</p>'; return; }
+  if (!main.length) { host.innerHTML = '<p class="meta">No matches for this court.</p>'; return; }
 
   // group by round
   const rounds = {};
@@ -378,7 +390,7 @@ $('#btnCreateTour').addEventListener('click', async () => {
 $('#btnCreateDiv').addEventListener('click', async () => {
   const placement = $('#chkPlacement').checked;
   try {
-    const r = await apiPost('create_division', { tournament_id: $('#tourSelect').value, name: $('#newDivName').value.trim(), placement, group_count: placement ? $('#groupCount').value : undefined, bracket_size: placement ? undefined : $('#bracketSize').value, third_place: placement ? false : $('#chkThird').checked });
+    const r = await apiPost('create_division', { tournament_id: $('#tourSelect').value, name: $('#newDivName').value.trim(), placement, courts: $('#courtCount').value, group_count: placement ? $('#groupCount').value : undefined, bracket_size: placement ? undefined : $('#bracketSize').value, third_place: placement ? false : $('#chkThird').checked });
     toast(`Created ${r.division_id} (${r.slots} slots)`); cfg.division_id = r.division_id; save(); await loadMeta();
   } catch (e) { toast(e.message, true); }
 });
@@ -426,52 +438,49 @@ $('#btnSaveSlots').addEventListener('click', async () => {
   catch (e) { toast(e.message, true); }
 });
 
-// Placement → Elimination routing
+// Elimination round-1 link editor (case Y: default seed + editable before start)
 $('#btnLoadMap').addEventListener('click', async () => {
   if (!cfg.division_id) { toast('Select a division.', true); return; }
   try {
     await refreshState();
     const e1 = state.matches.filter((m) => m.phase === 'elim1');
-    if (!e1.length) { $('#mapArea').innerHTML = '<p class="meta">This division has no placement routing (non-placement bracket).</p>'; $('#btnSaveMap').classList.add('hidden'); return; }
+    if (!e1.length) { $('#mapArea').innerHTML = '<p class="meta">No round-1 links for this bracket.</p>'; $('#btnSaveMap').classList.add('hidden'); return; }
     const ps = state.matches.filter((m) => m.phase === 'placement');
     const groups = ps.map((m) => m.code.replace('P', ''));
-    // current routing from sources
+    const locked = state.matches.some((m) => (m.phase === 'elim1' || m.phase === 'elim') && m.winner && m.outcome !== 'bye');
     const cur = {};
     e1.forEach((m) => {
-      ['red', 'white'].forEach((side) => {
-        const src = side === 'red' ? m.red_source : m.white_source;
+      ['R', 'W'].forEach((side) => {
+        const src = side === 'R' ? m.red_source : m.white_source;
         const mm = String(src).match(/^match:P(\d+):(W|L)$/);
-        if (mm) cur[m.code + ':' + (side === 'red' ? 'R' : 'W')] = mm[1] + ':' + mm[2];
+        cur[m.code + ':' + side] = mm ? mm[1] + ':' + mm[2] : (src === 'BYE' ? 'BYE' : '');
       });
     });
-    let html = '<table class="maptbl"><tr><th>Elim match</th><th>Red source</th><th>White source</th></tr>';
+    let html = locked ? '<p class="meta" style="color:#b3261e">Locked — elimination results exist. Undo them to edit.</p>' : '<p class="meta">Default = standard seed. Edit any slot before matches start.</p>';
+    html += '<table class="maptbl"><tr><th>Match</th><th>Court</th><th>Red source</th><th>White source</th></tr>';
     e1.forEach((m) => {
-      html += `<tr><td>${esc(m.code)}</td>
-        <td>${srcSelect(m.code, 'R', groups, cur)}</td>
-        <td>${srcSelect(m.code, 'W', groups, cur)}</td></tr>`;
+      html += `<tr><td>${esc(m.code)}</td><td>${esc(m.court || '')}</td>
+        <td>${srcSelect(m.code, 'R', groups, cur, locked)}</td>
+        <td>${srcSelect(m.code, 'W', groups, cur, locked)}</td></tr>`;
     });
     $('#mapArea').innerHTML = html + '</table>';
-    $('#btnSaveMap').classList.remove('hidden');
+    $('#btnSaveMap').classList.toggle('hidden', locked);
   } catch (e) { toast(e.message, true); }
 });
-function srcSelect(code, side, groups, cur) {
-  const key = code + ':' + side; const sel = cur[key] || '';
-  let opts = '<option value="">(BYE)</option>';
+function srcSelect(code, side, groups, cur, locked) {
+  const sel = cur[code + ':' + side] || '';
+  let opts = '<option value="BYE">(BYE)</option>';
   groups.forEach((g) => {
     ['W', 'L'].forEach((res) => {
       const v = g + ':' + res;
-      opts += `<option value="${v}" ${sel === v ? 'selected' : ''}>Group ${g} ${res === 'W' ? 'Winner' : 'Loser'}</option>`;
+      opts += `<option value="${v}" ${sel === v ? 'selected' : ''}>Grp ${g} ${res === 'W' ? 'Winner' : 'Loser'}</option>`;
     });
   });
-  return `<select class="map-sel" data-code="${code}" data-side="${side}">${opts}</select>`;
+  return `<select class="map-sel" data-code="${code}" data-side="${side}" ${locked ? 'disabled' : ''}>${opts}</select>`;
 }
 $('#btnSaveMap').addEventListener('click', async () => {
-  const map = $$('.map-sel').map((sel) => {
-    if (!sel.value) return null;
-    const [g, res] = sel.value.split(':');
-    return { elim_code: sel.dataset.code, side: sel.dataset.side, p_group: g, result: res };
-  }).filter(Boolean);
-  try { await apiPost('set_placement_map', { division_id: cfg.division_id, map }); toast('Routing saved'); await refreshState(); }
+  const links = $$('.map-sel').map((sel) => ({ elim_code: sel.dataset.code, side: sel.dataset.side, src: sel.value === 'BYE' ? 'BYE' : 'P' + sel.value }));
+  try { await apiPost('set_links', { division_id: cfg.division_id, links }); toast('Links saved'); await refreshState(); renderAll(); }
   catch (e) { toast(e.message, true); }
 });
 
