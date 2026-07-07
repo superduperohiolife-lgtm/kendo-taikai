@@ -1,132 +1,160 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>剣道大会 試合管理</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kendo Tournament Manager</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header class="app-header">
-  <h1>剣道大会 試合管理</h1>
-  <select id="divisionSelect" aria-label="部門選択"></select>
-</header>
 
-<main>
-  <!-- ① 閲覧 -->
-  <section id="view-bracket" class="tabpane active">
-    <div class="seg" role="tablist">
-      <button class="seg-btn active" data-sub="bracket">トーナメント表</button>
-      <button class="seg-btn" data-sub="list">試合一覧</button>
-    </div>
-    <div id="bracketArea" class="bracket-scroll"></div>
-    <div id="matchListArea" class="hidden"></div>
-    <p class="meta" id="pollStatus"></p>
-  </section>
+<!-- ===== Login gate ===== -->
+<div id="loginGate" class="gate">
+  <div class="gate-card">
+    <h1>Kendo Tournament</h1>
+    <p class="gate-sub">Enter your access key</p>
+    <input id="gateApi" placeholder="GAS Web App URL (…/exec)">
+    <input id="gateKey" placeholder="Access key" autocomplete="off">
+    <button id="gateEnter" class="primary">Enter</button>
+    <p class="gate-hint">Your role (View / Edit / Admin) is detected from the key.
+       Most members only need the View key.</p>
+    <p id="gateErr" class="gate-err"></p>
+  </div>
+</div>
 
-  <!-- ② 結果入力 -->
-  <section id="view-input" class="tabpane">
-    <h2>結果入力</h2>
-    <div id="readyMatches"></div>
-    <h3>入力済み（取消可）</h3>
-    <div id="doneMatches"></div>
-  </section>
+<!-- ===== App ===== -->
+<div id="app" class="hidden">
+  <header class="app-header">
+    <h1>Kendo Tournament</h1>
+    <select id="divisionSelect" aria-label="Division"></select>
+    <span id="roleBadge" class="role-badge"></span>
+  </header>
 
-  <!-- ③ 選手登録 -->
-  <section id="view-players" class="tabpane">
-    <h2>選手登録</h2>
-    <div class="card">
-      <label>団体で絞り込み <input id="teamFilter" list="teamList" placeholder="例: SCKF"></label>
-      <datalist id="teamList"></datalist>
-      <label>選手名で検索 <input id="nameFilter" placeholder="名前の一部"></label>
-      <button id="btnSearchPlayers" class="primary">検索</button>
-    </div>
-    <div id="playerList"></div>
-    <div class="card">
-      <h3>新規選手を追加</h3>
-      <label>団体名 <input id="newTeam" list="teamList"></label>
-      <label>選手名 <input id="newName"></label>
-      <button id="btnAddPlayer" class="primary">選手マスタに追加</button>
-    </div>
-  </section>
-
-  <!-- ④ 運営（大会作成・枠割当・接続設定） -->
-  <section id="view-admin" class="tabpane">
-    <h2>運営</h2>
-
-    <div class="card">
-      <h3>接続設定</h3>
-      <label>GAS Web App URL <input id="cfgApi" placeholder="https://script.google.com/macros/s/…/exec"></label>
-      <label>閲覧キー <input id="cfgViewKey"></label>
-      <label>入力キー <input id="cfgEditKey"></label>
-      <label>入力者名（記録用） <input id="cfgBy" placeholder="例: Toshi"></label>
-      <button id="btnSaveCfg" class="primary">設定を保存</button>
-    </div>
-
-    <div class="card">
-      <h3>大会を作成</h3>
-      <label>大会名 <input id="newTourName"></label>
-      <label>開催日 <input id="newTourDate" type="date"></label>
-      <button id="btnCreateTour" class="primary">大会を作成</button>
-    </div>
-
-    <div class="card">
-      <h3>部門を作成</h3>
-      <label>大会 <select id="tourSelect"></select></label>
-      <label>部門名 <input id="newDivName" placeholder="例: Jr Youth Girls"></label>
-      <label class="row"><input id="chkPlacement" type="checkbox" checked> Placement戦あり（AUSKF式）</label>
-      <div id="placementOpts">
-        <label>Placementグループ数（=枠数の半分） <input id="groupCount" type="number" min="2" max="60" value="14"></label>
+  <main>
+    <!-- View (3 sub-tabs) -->
+    <section id="view-view" class="tabpane active">
+      <div class="seg" role="tablist">
+        <button class="seg-btn active" data-sub="placement">Placement</button>
+        <button class="seg-btn" data-sub="elim">Elimination</button>
+        <button class="seg-btn" data-sub="list">Match List</button>
       </div>
-      <div id="elimOpts" class="hidden">
-        <label>枠数 <select id="bracketSize">
-          <option>4</option><option>8</option><option selected>16</option>
-          <option>32</option><option>64</option><option>128</option>
-        </select></label>
-        <label class="row"><input id="chkThird" type="checkbox"> 3位決定戦あり</label>
+      <div id="subPlacement" class="subpane"></div>
+      <div id="subElim" class="subpane hidden">
+        <div class="zoombar">
+          <button data-z="out">−</button><span id="zoomLbl">100%</span><button data-z="in">+</button>
+          <button data-z="fit">Fit</button>
+        </div>
+        <div id="elimScroll" class="elim-scroll"></div>
       </div>
-      <button id="btnCreateDiv" class="primary">部門を作成（ブラケット生成）</button>
-    </div>
+      <div id="subList" class="subpane hidden"></div>
+      <p class="meta" id="pollStatus"></p>
+    </section>
 
-    <div class="card">
-      <h3>枠割当（選手・BYE）</h3>
-      <p class="meta">上部の部門を選択してから割当。試合開始前に確定してください。</p>
-      <button id="btnLoadSlots">枠を読み込む</button>
-      <div id="slotArea"></div>
-      <button id="btnSaveSlots" class="primary hidden">割当を保存</button>
-    </div>
-  </section>
-</main>
+    <!-- Result entry (edit+) -->
+    <section id="view-input" class="tabpane">
+      <h2>Result Entry</h2>
+      <div id="readyMatches"></div>
+      <h3>Recorded (undo available)</h3>
+      <div id="doneMatches"></div>
+    </section>
 
-<nav class="tabbar">
-  <button class="tab active" data-tab="view-bracket">閲覧</button>
-  <button class="tab" data-tab="view-input">入力</button>
-  <button class="tab" data-tab="view-players">選手</button>
-  <button class="tab" data-tab="view-admin">運営</button>
-</nav>
+    <!-- Admin -->
+    <section id="view-admin" class="tabpane">
+      <h2>Admin</h2>
 
-<!-- 結果入力ダイアログ -->
+      <details class="card" open><summary>Bulk edit (Google Sheets)</summary>
+        <p class="meta">Open the spreadsheet to edit players, entries and matches in bulk.</p>
+        <a id="sheetLink" class="btn-link" target="_blank" rel="noopener">Open spreadsheet ↗</a>
+      </details>
+
+      <details class="card"><summary>Create tournament</summary>
+        <label>Tournament name <input id="newTourName"></label>
+        <label>Date <input id="newTourDate" type="date"></label>
+        <button id="btnCreateTour" class="primary">Create tournament</button>
+      </details>
+
+      <details class="card"><summary>Create division</summary>
+        <label>Tournament <select id="tourSelect"></select></label>
+        <label>Division name <input id="newDivName" placeholder="e.g. Jr Youth Girls"></label>
+        <label class="row"><input id="chkPlacement" type="checkbox" checked> Placement round (AUSKF style)</label>
+        <div id="placementOpts">
+          <label>Placement groups (= half of slots) <input id="groupCount" type="number" min="2" max="60" value="14"></label>
+        </div>
+        <div id="elimOpts" class="hidden">
+          <label>Bracket size <select id="bracketSize">
+            <option>4</option><option>8</option><option selected>16</option>
+            <option>32</option><option>64</option><option>128</option>
+          </select></label>
+          <label class="row"><input id="chkThird" type="checkbox"> 3rd place match</label>
+        </div>
+        <button id="btnCreateDiv" class="primary">Create division (generate bracket)</button>
+      </details>
+
+      <details class="card"><summary>Register players</summary>
+        <label>Filter by team <input id="teamFilter" list="teamList" placeholder="e.g. SCKF"></label>
+        <datalist id="teamList"></datalist>
+        <label>Search name <input id="nameFilter"></label>
+        <button id="btnSearchPlayers">Search</button>
+        <div id="playerList"></div>
+        <hr>
+        <label>Team <input id="newTeam" list="teamList"></label>
+        <label>Player name <input id="newName"></label>
+        <button id="btnAddPlayer" class="primary">Add to player master</button>
+        <p class="meta">For many players, use bulk edit (spreadsheet) above — it is much faster.</p>
+      </details>
+
+      <details class="card"><summary>Slot assignment (players / BYE)</summary>
+        <p class="meta">Select the division at the top, then assign. Finalize before matches start.</p>
+        <button id="btnLoadSlots">Load slots</button>
+        <div id="slotArea"></div>
+        <button id="btnSaveSlots" class="primary hidden">Save assignment</button>
+      </details>
+
+      <details class="card"><summary>Placement → Elimination routing</summary>
+        <p class="meta">Decide in advance where each Placement result goes.
+          e.g. "Group 1 Winner → Elim match 3, Red".</p>
+        <button id="btnLoadMap">Load routing</button>
+        <div id="mapArea"></div>
+        <button id="btnSaveMap" class="primary hidden">Save routing</button>
+      </details>
+
+      <details class="card"><summary>Courts</summary>
+        <p class="meta">Assign a court label to each match.</p>
+        <button id="btnLoadCourts">Load matches</button>
+        <div id="courtArea"></div>
+      </details>
+    </section>
+  </main>
+
+  <nav class="tabbar" id="tabbar">
+    <button class="tab active" data-tab="view-view">View</button>
+    <button class="tab" data-tab="view-input" data-min="edit">Entry</button>
+    <button class="tab" data-tab="view-admin" data-min="admin">Admin</button>
+  </nav>
+</div>
+
+<!-- Result dialog -->
 <dialog id="resultDialog">
   <form method="dialog" id="resultForm">
-    <h3 id="rdTitle">結果入力</h3>
+    <h3 id="rdTitle">Result</h3>
     <div class="rd-players">
-      <button type="button" id="rdRedBtn" class="side red">赤</button>
-      <span class="vs">対</span>
-      <button type="button" id="rdWhiteBtn" class="side white">白</button>
+      <button type="button" id="rdRedBtn" class="side red">Red</button>
+      <span class="vs">vs</span>
+      <button type="button" id="rdWhiteBtn" class="side white">White</button>
     </div>
-    <p class="meta">勝者側をタップ → 得点記号を選択（最大2）</p>
-    <div class="pointrow"><span class="lbl red-lbl">赤</span><div id="rdRedPts" class="chips"></div></div>
-    <div class="pointrow"><span class="lbl white-lbl">白</span><div id="rdWhitePts" class="chips"></div></div>
-    <label>結果種別
+    <p class="meta">Tap the winner, then choose point symbols (max 2).</p>
+    <div class="pointrow"><span class="lbl red-lbl">Red</span><div id="rdRedPts" class="chips"></div></div>
+    <div class="pointrow"><span class="lbl white-lbl">White</span><div id="rdWhitePts" class="chips"></div></div>
+    <label>Outcome
       <select id="rdOutcome">
-        <option value="normal">通常</option>
-        <option value="encho">延長</option>
-        <option value="fusen">不戦勝（勝者に○○）</option>
+        <option value="normal">Normal</option>
+        <option value="encho">Encho (overtime)</option>
+        <option value="fusen">Fusen — walkover (winner ○○)</option>
       </select>
     </label>
     <div class="rd-actions">
-      <button type="button" id="rdCancel">閉じる</button>
-      <button type="button" id="rdSave" class="primary">保存</button>
+      <button type="button" id="rdCancel">Close</button>
+      <button type="button" id="rdSave" class="primary">Save</button>
     </div>
   </form>
 </dialog>
