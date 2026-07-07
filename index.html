@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>剣道大会 試合管理</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="app-header">
+  <h1>剣道大会 試合管理</h1>
+  <select id="divisionSelect" aria-label="部門選択"></select>
+</header>
+
+<main>
+  <!-- ① 閲覧 -->
+  <section id="view-bracket" class="tabpane active">
+    <div class="seg" role="tablist">
+      <button class="seg-btn active" data-sub="bracket">トーナメント表</button>
+      <button class="seg-btn" data-sub="list">試合一覧</button>
+    </div>
+    <div id="bracketArea" class="bracket-scroll"></div>
+    <div id="matchListArea" class="hidden"></div>
+    <p class="meta" id="pollStatus"></p>
+  </section>
+
+  <!-- ② 結果入力 -->
+  <section id="view-input" class="tabpane">
+    <h2>結果入力</h2>
+    <div id="readyMatches"></div>
+    <h3>入力済み（取消可）</h3>
+    <div id="doneMatches"></div>
+  </section>
+
+  <!-- ③ 選手登録 -->
+  <section id="view-players" class="tabpane">
+    <h2>選手登録</h2>
+    <div class="card">
+      <label>団体で絞り込み <input id="teamFilter" list="teamList" placeholder="例: SCKF"></label>
+      <datalist id="teamList"></datalist>
+      <label>選手名で検索 <input id="nameFilter" placeholder="名前の一部"></label>
+      <button id="btnSearchPlayers" class="primary">検索</button>
+    </div>
+    <div id="playerList"></div>
+    <div class="card">
+      <h3>新規選手を追加</h3>
+      <label>団体名 <input id="newTeam" list="teamList"></label>
+      <label>選手名 <input id="newName"></label>
+      <button id="btnAddPlayer" class="primary">選手マスタに追加</button>
+    </div>
+  </section>
+
+  <!-- ④ 運営（大会作成・枠割当・接続設定） -->
+  <section id="view-admin" class="tabpane">
+    <h2>運営</h2>
+
+    <div class="card">
+      <h3>接続設定</h3>
+      <label>GAS Web App URL <input id="cfgApi" placeholder="https://script.google.com/macros/s/…/exec"></label>
+      <label>閲覧キー <input id="cfgViewKey"></label>
+      <label>入力キー <input id="cfgEditKey"></label>
+      <label>入力者名（記録用） <input id="cfgBy" placeholder="例: Toshi"></label>
+      <button id="btnSaveCfg" class="primary">設定を保存</button>
+    </div>
+
+    <div class="card">
+      <h3>大会を作成</h3>
+      <label>大会名 <input id="newTourName"></label>
+      <label>開催日 <input id="newTourDate" type="date"></label>
+      <button id="btnCreateTour" class="primary">大会を作成</button>
+    </div>
+
+    <div class="card">
+      <h3>部門を作成</h3>
+      <label>大会 <select id="tourSelect"></select></label>
+      <label>部門名 <input id="newDivName" placeholder="例: Jr Youth Girls"></label>
+      <label class="row"><input id="chkPlacement" type="checkbox" checked> Placement戦あり（AUSKF式）</label>
+      <div id="placementOpts">
+        <label>Placementグループ数（=枠数の半分） <input id="groupCount" type="number" min="2" max="60" value="14"></label>
+      </div>
+      <div id="elimOpts" class="hidden">
+        <label>枠数 <select id="bracketSize">
+          <option>4</option><option>8</option><option selected>16</option>
+          <option>32</option><option>64</option><option>128</option>
+        </select></label>
+        <label class="row"><input id="chkThird" type="checkbox"> 3位決定戦あり</label>
+      </div>
+      <button id="btnCreateDiv" class="primary">部門を作成（ブラケット生成）</button>
+    </div>
+
+    <div class="card">
+      <h3>枠割当（選手・BYE）</h3>
+      <p class="meta">上部の部門を選択してから割当。試合開始前に確定してください。</p>
+      <button id="btnLoadSlots">枠を読み込む</button>
+      <div id="slotArea"></div>
+      <button id="btnSaveSlots" class="primary hidden">割当を保存</button>
+    </div>
+  </section>
+</main>
+
+<nav class="tabbar">
+  <button class="tab active" data-tab="view-bracket">閲覧</button>
+  <button class="tab" data-tab="view-input">入力</button>
+  <button class="tab" data-tab="view-players">選手</button>
+  <button class="tab" data-tab="view-admin">運営</button>
+</nav>
+
+<!-- 結果入力ダイアログ -->
+<dialog id="resultDialog">
+  <form method="dialog" id="resultForm">
+    <h3 id="rdTitle">結果入力</h3>
+    <div class="rd-players">
+      <button type="button" id="rdRedBtn" class="side red">赤</button>
+      <span class="vs">対</span>
+      <button type="button" id="rdWhiteBtn" class="side white">白</button>
+    </div>
+    <p class="meta">勝者側をタップ → 得点記号を選択（最大2）</p>
+    <div class="pointrow"><span class="lbl red-lbl">赤</span><div id="rdRedPts" class="chips"></div></div>
+    <div class="pointrow"><span class="lbl white-lbl">白</span><div id="rdWhitePts" class="chips"></div></div>
+    <label>結果種別
+      <select id="rdOutcome">
+        <option value="normal">通常</option>
+        <option value="encho">延長</option>
+        <option value="fusen">不戦勝（勝者に○○）</option>
+      </select>
+    </label>
+    <div class="rd-actions">
+      <button type="button" id="rdCancel">閉じる</button>
+      <button type="button" id="rdSave" class="primary">保存</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toast" class="toast hidden"></div>
+<script src="app.js"></script>
+</body>
+</html>

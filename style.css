@@ -1,0 +1,134 @@
+/* 剣道大会 試合管理 v0.1
+ * デザイン: 剣道の試合記録用紙をモチーフ。
+ * 赤/白のタスキ配色で両選手を識別、藍(紺)を運営色に。
+ * フォント既定: 日本語 Meiryo UI / 英語 Calibri
+ */
+:root {
+  --ink: #1c1c1c;          /* 墨 */
+  --paper: #f7f5f0;        /* 記録用紙 */
+  --card: #ffffff;
+  --aka: #b3261e;          /* 赤タスキ */
+  --shiro-line: #9aa0a6;   /* 白側の輪郭 */
+  --ai: #22335c;           /* 藍・紺(剣道着) */
+  --won: #fdf3e7;
+  --radius: 10px;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: "Meiryo UI", Calibri, "Hiragino Kaku Gothic ProN", sans-serif;
+  background: var(--paper); color: var(--ink);
+  padding-bottom: 64px; /* tabbar分 */
+  font-size: 16px;
+}
+
+/* ヘッダ */
+.app-header {
+  background: var(--ai); color: #fff;
+  padding: 10px 12px; display: flex; gap: 10px; align-items: center;
+  position: sticky; top: 0; z-index: 10;
+}
+.app-header h1 { font-size: 16px; margin: 0; font-weight: 700; letter-spacing: .06em; }
+.app-header select { flex: 1; min-width: 0; padding: 8px; border-radius: 8px; border: none; font-size: 14px; }
+
+main { padding: 12px; max-width: 900px; margin: 0 auto; }
+h2 { font-size: 17px; margin: 8px 0; border-left: 6px solid var(--ai); padding-left: 8px; }
+h3 { font-size: 15px; margin: 14px 0 6px; }
+.meta { color: #666; font-size: 12px; }
+.hidden { display: none !important; }
+
+.tabpane { display: none; }
+.tabpane.active { display: block; }
+
+/* 下部タブ */
+.tabbar {
+  position: fixed; bottom: 0; left: 0; right: 0; height: 56px;
+  display: flex; background: #fff; border-top: 1px solid #ddd; z-index: 10;
+}
+.tab { flex: 1; border: none; background: none; font-size: 14px; color: #555; font-family: inherit; }
+.tab.active { color: var(--ai); font-weight: 700; border-top: 3px solid var(--ai); }
+
+/* セグメント */
+.seg { display: flex; gap: 6px; margin-bottom: 10px; }
+.seg-btn { flex: 1; padding: 8px; border-radius: 8px; border: 1px solid #ccc; background: #fff; font-family: inherit; }
+.seg-btn.active { background: var(--ai); color: #fff; border-color: var(--ai); }
+
+/* カード・フォーム */
+.card { background: var(--card); border-radius: var(--radius); padding: 12px; margin: 10px 0; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+label { display: block; margin: 8px 0; font-size: 14px; }
+label.row { display: flex; align-items: center; gap: 8px; }
+input, select { width: 100%; padding: 10px; margin-top: 4px; border: 1px solid #ccc; border-radius: 8px; font-size: 16px; font-family: inherit; }
+label.row input[type="checkbox"] { width: auto; margin: 0; }
+button { font-family: inherit; font-size: 15px; padding: 10px 14px; border-radius: 8px; border: 1px solid #bbb; background: #fff; cursor: pointer; }
+button.primary { background: var(--ai); border-color: var(--ai); color: #fff; font-weight: 700; width: 100%; margin-top: 8px; }
+
+/* ブラケット */
+.bracket-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.bracket { display: flex; gap: 14px; align-items: flex-start; padding-bottom: 8px; }
+.round { display: flex; flex-direction: column; gap: 10px; min-width: 190px; justify-content: space-around; }
+.round-label { text-align: center; font-size: 12px; color: var(--ai); font-weight: 700; letter-spacing: .08em; }
+
+.match { background: var(--card); border-radius: var(--radius); box-shadow: 0 1px 3px rgba(0,0,0,.1); overflow: hidden; }
+.match .mcode { font-size: 11px; color: #777; padding: 3px 8px 0; }
+.match .mcode em { color: var(--aka); font-style: normal; font-weight: 700; }
+.side-row { display: flex; align-items: center; gap: 6px; padding: 6px 8px; font-size: 14px; min-height: 34px; }
+.side-row i { width: 5px; align-self: stretch; border-radius: 3px; flex: none; }
+.side-row.red i { background: var(--aka); }
+.side-row.white i { background: #fff; border: 1.5px solid var(--shiro-line); }
+.side-row.won { background: var(--won); font-weight: 700; }
+.pname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pteam { font-size: 11px; color: #888; flex: none; }
+.pts { font-size: 14px; letter-spacing: .2em; flex: none; min-width: 2.2em; text-align: right; }
+.tbd { color: #bbb; }
+.bye { color: #999; font-style: italic; }
+.match.tappable { border: 2px solid var(--ai); }
+.match.tappable:active { transform: scale(.98); }
+
+/* 試合一覧 */
+.mlist { width: 100%; border-collapse: collapse; background: #fff; font-size: 13px; }
+.mlist th, .mlist td { border: 1px solid #ddd; padding: 6px; text-align: left; }
+.mlist th { background: var(--ai); color: #fff; font-weight: 400; }
+.mlist td.won { background: var(--won); font-weight: 700; }
+.red-lbl { color: var(--aka); font-weight: 700; }
+.white-lbl { color: #555; font-weight: 700; }
+
+/* 入力済み行 */
+.done-row { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
+.done-row .match { flex: 1; }
+.undo { color: var(--aka); border-color: var(--aka); flex: none; }
+
+/* ダイアログ */
+dialog { border: none; border-radius: 14px; width: min(92vw, 420px); padding: 16px; }
+dialog::backdrop { background: rgba(0,0,0,.45); }
+.rd-players { display: flex; gap: 8px; align-items: center; margin: 10px 0; }
+.rd-players .vs { color: #999; font-size: 12px; }
+.side { flex: 1; padding: 14px 6px; border-radius: 10px; font-size: 15px; font-weight: 700; }
+.side.red { border: 2px solid var(--aka); color: var(--aka); background: #fff; }
+.side.white { border: 2px solid var(--shiro-line); color: var(--ink); background: #fff; }
+.side.sel.red { background: var(--aka); color: #fff; }
+.side.sel.white { background: var(--ink); color: #fff; }
+.pointrow { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+.pointrow .lbl { width: 1.6em; font-weight: 700; }
+.chips { display: flex; gap: 6px; flex: 1; }
+.chip { flex: 1; padding: 12px 0; border-radius: 8px; border: 1px solid #ccc; background: #fff; font-weight: 700; }
+.chip.on { background: var(--ai); color: #fff; border-color: var(--ai); }
+.rd-actions { display: flex; gap: 8px; margin-top: 14px; }
+.rd-actions button { flex: 1; }
+
+/* 枠割当 */
+.slot-row { display: flex; gap: 6px; align-items: center; margin: 6px 0; }
+.slot-no { width: 2em; text-align: right; color: var(--ai); font-weight: 700; flex: none; }
+.slot-sel { flex: 2; }
+.slot-comp { flex: 1; }
+
+/* トースト */
+.toast {
+  position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%);
+  background: var(--ink); color: #fff; padding: 10px 18px; border-radius: 22px;
+  font-size: 14px; z-index: 100; max-width: 90vw;
+}
+.toast.err { background: var(--aka); }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
