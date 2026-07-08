@@ -76,8 +76,9 @@ function applyRoleUI() {
     const min = { edit: 2, admin: 3 }[t.dataset.min] || 1;
     t.classList.toggle('hidden', r < min);
   });
-  // division pulldown only for view/edit (hidden for admin per req #10)
-  $('#divisionSelect').classList.toggle('hidden', role === 'admin');
+  // ディビジョン選択は全ロールで表示（Adminも現在のディビジョンが常に見える／切替可能）
+  // ※旧仕様ではAdmin時に非表示だったが、どのディビジョンを操作中か分からず混乱の原因になったため常時表示に変更
+  $('#divisionSelect').classList.remove('hidden');
 }
 
 // ---------------- Tabs ----------------
