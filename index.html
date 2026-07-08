@@ -13,7 +13,8 @@
   <div class="gate-card">
     <h1>Kendo Tournament</h1>
     <p class="gate-sub">Enter your access key</p>
-    <input id="gateApi" placeholder="GAS Web App URL (…/exec)">
+    <!-- URL is fixed in app.js (DEFAULT_API); hidden so viewers/editors enter only the key -->
+    <input id="gateApi" placeholder="GAS Web App URL (…/exec)" hidden>
     <input id="gateKey" placeholder="Access key" autocomplete="off">
     <button id="gateEnter" class="primary">Enter</button>
     <p class="gate-hint">Your role (View / Edit / Admin) is detected from the key.

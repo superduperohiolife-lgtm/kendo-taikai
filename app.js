@@ -5,6 +5,11 @@
 'use strict';
 
 const CFG_KEY = 'kendo_cfg_v2';
+
+// GAS Web App（exec）URL：デプロイ先で固定。ここを書き換えて再デプロイすればURL変更に対応
+// 編集者・閲覧者はURL入力不要（アクセスキーのみ入力）
+const DEFAULT_API = 'https://script.google.com/macros/s/AKfycby3j_IrBkZvATR_O4XWY0ylgu5j_smSe-oOYRWn-PrFsStwp40OrALZthizQ1O82NwwPw/exec';
+
 let cfg = load();
 let role = null;
 function load() { try { return JSON.parse(localStorage.getItem(CFG_KEY)) || {}; } catch (e) { return {}; } }
@@ -35,12 +40,18 @@ async function apiPost(action, body) {
 }
 
 // ---------------- Login gate ----------------
+// URLは固定（DEFAULT_API）。URL入力欄は隠し、キーのみ入力にする
+if (DEFAULT_API) {
+  const apiField = $('#gateApi');
+  if (apiField) { apiField.value = DEFAULT_API; apiField.style.display = 'none'; }
+}
 $('#gateEnter').addEventListener('click', tryLogin);
 $('#gateKey').addEventListener('keydown', (e) => { if (e.key === 'Enter') tryLogin(); });
 async function tryLogin() {
-  const api = $('#gateApi').value.trim();
+  const api = (DEFAULT_API || ($('#gateApi') && $('#gateApi').value.trim()));
   const k = $('#gateKey').value.trim();
-  if (!api || !k) { $('#gateErr').textContent = 'Enter both URL and key.'; return; }
+  if (!api) { $('#gateErr').textContent = 'API URL is not configured.'; return; }
+  if (!k) { $('#gateErr').textContent = 'Enter your access key.'; return; }
   cfg.api = api; cfg.k = k;
   try {
     const who = await apiGet('whoami');
