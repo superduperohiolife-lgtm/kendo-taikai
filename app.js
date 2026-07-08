@@ -221,6 +221,27 @@ function renderElim() {
   const totalH = n0 * (BOX_H * 2 + baseGapY) + PAD * 2;
   const totalW = roundNums.length * (COL_W + GAP_X) + PAD * 2;
 
+  // 葉（最初の列）の並び順を、決勝から再帰的に辿って算出する
+  // ※match_id順ではなく実際の配線順に並べることで、接続線の交差・箱の重なりを防ぐ
+  const byCode = {}; main.forEach((m) => { byCode[m.code] = m; });
+  const inSetFeeders = (m) => feederCodes(m).filter((c) => byCode[c]);
+  const referenced = new Set();
+  main.forEach((m) => inSetFeeders(m).forEach((c) => referenced.add(c)));
+  const roots = main.filter((m) => !referenced.has(m.code)).sort((a, b) => a.match_id < b.match_id ? -1 : 1);
+  const leafOrder = [], seen = new Set();
+  (function buildLeafOrder(list) {
+    list.forEach((m) => {
+      if (!m || seen.has(m.code)) return;
+      seen.add(m.code);
+      const fs = inSetFeeders(m);
+      if (!fs.length) { leafOrder.push(m.code); return; }
+      buildLeafOrder(fs.map((c) => byCode[c]));
+    });
+  })(roots);
+  // 未訪問（court絞り込み等で切れた）最初の列の試合は末尾にmatch_id順で追加
+  rounds[roundNums[0]].forEach((m) => { if (!seen.has(m.code)) { leafOrder.push(m.code); seen.add(m.code); } });
+  const leafIndex = {}; leafOrder.forEach((c, i) => { leafIndex[c] = i; });
+
   // compute y-center of each match
   const centers = {}; // code -> {x, yTop, yBot, cx, cy}
   roundNums.forEach((rn, ri) => {
@@ -229,7 +250,8 @@ function renderElim() {
     list.forEach((m, mi) => {
       let cy;
       if (ri === 0) {
-        cy = PAD + mi * (BOX_H * 2 + baseGapY) + BOX_H;
+        const li = leafIndex[m.code] != null ? leafIndex[m.code] : mi;
+        cy = PAD + li * (BOX_H * 2 + baseGapY) + BOX_H;
       } else {
         // center between the two feeding matches
         const feeders = feederCodes(m);
